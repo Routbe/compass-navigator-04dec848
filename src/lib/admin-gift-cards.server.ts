@@ -45,7 +45,7 @@ export async function fetchGiftShipments(openOnly: boolean): Promise<GiftShipmen
     return rows as unknown as GiftShipmentRow[];
   } catch (error) {
     console.error("[admin] cadeaubon-wachtrij kon niet worden gelezen", error);
-    return [];
+    throw new Error("gift_shipments_unavailable");
   }
 }
 

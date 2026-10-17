@@ -1,4 +1,5 @@
 # Roadmap
+- [ ] Uploaded gift/credential brief: implement remaining requirements; apply schema changes only after exact Neon change confirmation
 - [ ] Admin gifts: repair creation, fixed/percentage discounts, editable username recipient lookup and branded delivery
 - [ ] Badges: keep admin navigation in portal, normalize website links and suggest editable artwork accent colors
 - [ ] Issued credentials: hidden-by-default awards, linked issuer attribution, recipient mark/badge controls and email notices

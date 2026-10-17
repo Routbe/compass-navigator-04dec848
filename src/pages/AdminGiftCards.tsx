@@ -11,6 +11,7 @@ import { adminIssueGiftCard, listGiftShipments, setGiftShipmentStatus } from "@/
 import { AppLayout } from "@/components/layout/AppLayout";
 import { GIFT_PRESETS } from "@/lib/gift-cards";
 import type { GiftShipmentRow } from "@/lib/admin-gift-cards.server";
+import { IssuePersonalGift } from "@/components/admin/IssuePersonalGift";
 
 const STEP_LABEL: Record<string, string> = {
   pending_print: "Te drukken",
@@ -66,7 +67,7 @@ export default function AdminGiftCards() {
   return (
     <AppLayout title="Cadeaubonnen" crumbs={[{ label: "Beheer", to: "/admin" }, { label: "Cadeaubonnen" }]}>
     <div className="space-y-4">
-      <IssueGiftCard />
+      <IssuePersonalGift />
       <header className="space-y-1 pt-4">
         <h2 className="text-lg font-medium text-foreground">Verzending van fysieke bonnen</h2>
         <p className="text-sm text-muted-foreground">
