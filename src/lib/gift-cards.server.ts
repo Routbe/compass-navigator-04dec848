@@ -128,8 +128,13 @@ export async function startGiftCheckout(opts: {
 export async function markGiftCardPaid(opts: {
   giftId: string;
   reference?: string | null;
+  deliver?: boolean;
+  maxRedemptions?: number;
+  expiresAt?: string | null;
 }): Promise<"activated" | "duplicate" | "not_found"> {
-  const rows = (await sql`
+  const results = await sql.transaction([
+    sql`select id from public.gift_cards where id = ${opts.giftId} for update`,
+    sql`with activated as (
     update public.gift_cards
        set status = 'paid',
            paid_at = now(),
@@ -140,27 +145,23 @@ export async function markGiftCardPaid(opts: {
            stripe_reference = coalesce(${opts.reference ?? null}, stripe_reference),
            updated_at = now()
      where id = ${opts.giftId}
-       and status = 'pending'
+       and status in ('pending', 'paid')
     returning *
-  `) as Row[];
-  const row = rows[0];
+    ), promo as (
+      insert into public.promo_codes (code, label, percent_off, amount_off_cents, max_redemptions, expires_at, active)
+      select code, 'Cadeaubon', 0, amount_cents, ${opts.maxRedemptions ?? 1}, ${opts.expiresAt ?? null}::timestamptz, true from activated
+      on conflict (code) do nothing
+      returning code
+    ) select activated.* from activated
+  `]);
+  const row = results[1]?.[0];
   if (!row) {
     const exists =
       (await sql`select status from public.gift_cards where id = ${opts.giftId}`) as Row[];
     return exists.length > 0 ? "duplicate" : "not_found";
   }
 
-  const code = String(row["code"]);
-  const amount = Number(row["amount_cents"] ?? 0);
-
-  // De bon is vanaf nu een echte, eenmalige kortingscode in de checkout.
-  await sql`
-    insert into public.promo_codes (code, label, percent_off, amount_off_cents, max_redemptions, active)
-    values (${code}, ${`Cadeaubon ${euro(amount)}`}, 0, ${amount}, 1, true)
-    on conflict (code) do nothing
-  `;
-
-  await deliverGiftCard(row).catch((error) => {
+  if (opts.deliver !== false) await deliverGiftCard(row).catch((error) => {
     console.error("[gift] bezorging mislukt", { giftId: opts.giftId, error });
   });
   return "activated";
@@ -203,13 +204,28 @@ export async function deliverGiftCard(row: Row): Promise<void> {
     viewUrl,
   });
 
+  let recipientSent = !recipientEmail;
+  if (recipientEmail) {
+    const result = await sendMail({
+      to: recipientEmail,
+      subject: `Je kreeg een ROUT-cadeaubon van ${euro(amount)}`,
+      html: `<p>${escapeHtml(str(row, "purchaser_name") ?? "Iemand")} stuurde je een ROUT-cadeaubon van ${euro(amount)}.</p>
+        ${str(row, "message") ? `<blockquote>${escapeHtml(str(row, "message") ?? "")}</blockquote>` : ""}
+        <p>Code: <strong>${escapeHtml(code)}</strong></p>
+        <p><a href="${viewUrl}">Bekijk je bon</a></p>`,
+      attachments: [{ name: `cadeaubon-${code}.pdf`, contentBase64: giftBase64 }],
+    });
+    recipientSent = result.sent;
+  }
+
+  let purchaserSent = !purchaserEmail;
   if (purchaserEmail) {
-    await sendMail({
+    const result = await sendMail({
       to: purchaserEmail,
       subject: `Je ROUT-cadeaubon (${euro(amount)}) is klaar`,
       html: `<p>Bedankt! De cadeaubon <strong>${code}</strong> ter waarde van ${euro(amount)} is geactiveerd.</p>
         <p>Digitale versie: <a href="${viewUrl}">${viewUrl}</a></p>
-        ${recipientEmail ? `<p>We stuurden de bon ook naar ${recipientEmail}.</p>` : ""}
+        ${recipientEmail ? `<p>${recipientSent ? "De e-mail voor de ontvanger is aangeboden aan de maildienst." : "De e-mail voor de ontvanger kon nog niet worden verstuurd."}</p>` : ""}
         ${physical ? "<p>De fysieke bon versturen we gratis binnen België.</p>" : ""}
         <p>Je factuur ${invoiceNumber} zit in bijlage.</p>`,
       attachments: [
@@ -217,20 +233,10 @@ export async function deliverGiftCard(row: Row): Promise<void> {
         { name: `cadeaubon-${code}.pdf`, contentBase64: giftBase64 },
       ],
     });
+    purchaserSent = result.sent;
   }
 
-  if (recipientEmail) {
-    await sendMail({
-      to: recipientEmail,
-      subject: `Je kreeg een ROUT-cadeaubon van ${euro(amount)}`,
-      html: `<p>${escapeHtml(str(row, "purchaser_name") ?? "Iemand")} stuurde je een ROUT-cadeaubon van ${euro(amount)}.</p>
-        ${str(row, "message") ? `<blockquote>${escapeHtml(str(row, "message") ?? "")}</blockquote>` : ""}
-        <p>Code: <strong>${code}</strong></p>
-        <p>Bekijk je bon in 3D: <a href="${viewUrl}">${viewUrl}</a></p>
-        <p>De PDF zit in bijlage — vul de code in bij het afrekenen.</p>`,
-      attachments: [{ name: `cadeaubon-${code}.pdf`, contentBase64: giftBase64 }],
-    });
-  }
+  if (!recipientSent || !purchaserSent) return;
 
   await sql`
     update public.gift_cards
