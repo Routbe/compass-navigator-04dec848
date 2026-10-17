@@ -35,6 +35,7 @@ export function IssuePersonalGift() {
   const [query, setQuery] = useState("");
   const [matches, setMatches] = useState<Recipient[]>([]);
   const [picked, setPicked] = useState(false);
+  const [recipientUserId, setRecipientUserId] = useState<string | null>(null);
   const [review, setReview] = useState<GiftIssueInput | null>(null);
   const [saved, setSaved] = useState<{ input: GiftIssueInput; result: Result } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -64,17 +65,17 @@ export function IssuePersonalGift() {
       const amount = Number(value.replace(",", "."));
       const parsed = giftIssueSchema.safeParse({ kind, amountCents: kind === "fixed" ? Math.round(amount * 100) : undefined,
         percentOff: kind === "percentage" ? amount : undefined, maxDiscountCents: kind === "percentage" && cap ? Math.round(Number(cap.replace(",", ".")) * 100) : null,
-        recipientEmail: email, recipientName: name, message, expiresAt: expiry ? new Date(`${expiry}T23:59:59Z`).toISOString() : null,
+        recipientEmail: email, recipientUserId, recipientName: name, message, expiresAt: expiry ? new Date(`${expiry}T23:59:59Z`).toISOString() : null,
         maxRedemptions: Number(uses), sendEmail, language });
       if (!parsed.success) { toast.error(c.failed); return; }
       setReview(parsed.data);
     }}>
       <div className="space-y-1"><Label htmlFor="gift-value">{kind === "fixed" ? c.amount : c.percent}</Label><Input id="gift-value" type="number" min={kind === "fixed" ? 5 : 1} max={kind === "fixed" ? 500 : 100} step={kind === "fixed" ? ".01" : "1"} value={value} onChange={e => setValue(e.target.value)} required /></div>
       {kind === "percentage" && <div className="space-y-1"><Label htmlFor="gift-cap">{c.cap}</Label><Input id="gift-cap" type="number" min=".01" max="500" step=".01" value={cap} onChange={e => setCap(e.target.value)} /></div>}
-      <div className="relative space-y-1 sm:col-span-2"><Label htmlFor="gift-search">{c.search}</Label><Input id="gift-search" value={query} onChange={e => { setQuery(e.target.value); setPicked(false); setEmail(""); setName(""); }} autoComplete="off" />
-        {matches.length > 0 && <ul className="absolute z-20 w-full border border-border bg-popover p-1 shadow-md">{matches.map(r => <li key={r.userId}><Button type="button" variant="ghost" className="h-auto w-full justify-start whitespace-normal text-left" onClick={() => { setQuery(`@${r.username}`); setPicked(true); setMatches([]); setEmail(r.email); setName(r.name); }}>@{r.username} · {r.name}</Button></li>)}</ul>}
+      <div className="relative space-y-1 sm:col-span-2"><Label htmlFor="gift-search">{c.search}</Label><Input id="gift-search" value={query} onChange={e => { setQuery(e.target.value); setPicked(false); setRecipientUserId(null); setEmail(""); setName(""); }} autoComplete="off" />
+        {matches.length > 0 && <ul className="absolute z-20 w-full border border-border bg-popover p-1 shadow-md">{matches.map(r => <li key={r.userId}><Button type="button" variant="ghost" className="h-auto w-full justify-start whitespace-normal text-left" onClick={() => { setQuery(`@${r.username}`); setPicked(true); setRecipientUserId(r.userId); setMatches([]); setEmail(""); setName(r.name); }}>@{r.username} · {r.name}</Button></li>)}</ul>}
       </div>
-      <div className="space-y-1"><Label htmlFor="gift-email">{c.email}</Label><Input id="gift-email" type="email" value={email} onChange={e => setEmail(e.target.value)} maxLength={254} required={sendEmail} /></div>
+      <div className="space-y-1"><Label htmlFor="gift-email">{c.email}</Label><Input id="gift-email" type="email" value={email} placeholder={recipientUserId ? query : ""} onChange={e => setEmail(e.target.value)} maxLength={254} required={sendEmail && !recipientUserId} /></div>
       <div className="space-y-1"><Label htmlFor="gift-name">{c.name}</Label><Input id="gift-name" value={name} onChange={e => setName(e.target.value)} maxLength={80} /></div>
       <div className="space-y-1 sm:col-span-2"><Label htmlFor="gift-message">{c.message}</Label><Textarea id="gift-message" value={message} onChange={e => setMessage(e.target.value)} maxLength={300} /></div>
       <div className="space-y-1"><Label htmlFor="gift-expiry">{c.expiry}</Label><Input id="gift-expiry" type="date" value={expiry} onChange={e => setExpiry(e.target.value)} /></div>
@@ -83,14 +84,14 @@ export function IssuePersonalGift() {
       <Button type="submit" className="w-fit" disabled={busy}><Plus className="h-4 w-4" />{c.preview}</Button>
     </form>
     <Dialog open={review !== null} onOpenChange={v => { if (!v && !busy) setReview(null); }}><DialogContent><DialogHeader><DialogTitle>{c.preview}</DialogTitle></DialogHeader>
-      {review && <><dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm"><dt>{c.recipient}</dt><dd className="break-all">{review.recipientName} {review.recipientEmail || c.noRecipient}</dd><dt>{c.amount}</dt><dd>{valueLabel(review)}</dd><dt>{c.uses}</dt><dd>{review.maxRedemptions}</dd><dt>{c.expiry}</dt><dd>{review.expiresAt ? new Date(review.expiresAt).toLocaleDateString(language) : c.unlimited}</dd>{review.maxDiscountCents && <><dt>{c.cap}</dt><dd>{review.maxDiscountCents / 100} €</dd></>}</dl>
+      {review && <><dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm"><dt>{c.recipient}</dt><dd className="break-all">{review.recipientName} {review.recipientEmail || (review.recipientUserId ? query : c.noRecipient)}</dd><dt>{review.kind === "fixed" ? c.amount : c.percent}</dt><dd>{valueLabel(review)}</dd><dt>{c.uses}</dt><dd>{review.maxRedemptions}</dd><dt>{c.expiry}</dt><dd>{review.expiresAt ? new Date(review.expiresAt).toLocaleDateString(language) : c.unlimited}</dd>{review.maxDiscountCents && <><dt>{c.cap}</dt><dd>{review.maxDiscountCents / 100} €</dd></>}</dl>
       {review.message && <p className="whitespace-pre-wrap break-words text-sm">{review.message}</p>}
       <div className="flex flex-wrap justify-end gap-2"><Button variant="outline" disabled={busy} onClick={() => setReview(null)}>{c.cancel}</Button><Button disabled={busy} onClick={async () => {
         setBusy(true); try { const result = await issue({ data: review }); setSaved({ input: review, result }); setReview(null); toast.success(c.saved); } catch { toast.error(c.failed); } finally { setBusy(false); }
       }}>{c.confirm}</Button></div></>}
     </DialogContent></Dialog>
     {saved && <div className="space-y-2 border-t border-border pt-4" role="status"><div className="flex flex-wrap items-center gap-2"><span>{c.code}:</span><code className="break-all text-sm">{saved.result.code}</code><Button variant="ghost" size="icon" aria-label={c.copy} onClick={() => void navigator.clipboard.writeText(saved.result.code)}><Copy className="h-4 w-4" /></Button></div><p className={saved.result.delivery === "failed" ? "text-sm text-destructive" : "text-sm text-muted-foreground"}>{status(saved.result)}</p>
-      {saved.input.recipientEmail && <Button variant="outline" disabled={busy} onClick={async () => { setBusy(true); try { const result = await resend({ data: { code: saved.result.code, input: saved.input } }); setSaved({ ...saved, result: { code: saved.result.code, ...result } }); } catch { toast.error(c.failed); } finally { setBusy(false); } }}><Mail className="h-4 w-4" />{c.resend}</Button>}
+      {(saved.input.recipientEmail || saved.input.recipientUserId) && <Button variant="outline" disabled={busy} onClick={async () => { setBusy(true); try { const result = await resend({ data: { code: saved.result.code, input: saved.input } }); setSaved({ ...saved, result: { code: saved.result.code, ...result } }); } catch { toast.error(c.failed); } finally { setBusy(false); } }}><Mail className="h-4 w-4" />{c.resend}</Button>}
     </div>}
   </section>;
 }
