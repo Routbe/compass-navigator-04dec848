@@ -1,6 +1,6 @@
 # Roadmap
-- [ ] Uploaded gift/credential brief: implement remaining requirements; apply schema changes only after exact Neon change confirmation
-- [ ] Admin gifts: repair creation, fixed/percentage discounts, editable username recipient lookup and branded delivery
+- [ ] Uploaded gift/credential brief: db/99 prepared, awaiting exact Neon change confirmation; badge implementation and API still pending
+- [ ] Admin gifts: new fixed/percentage form, private username lookup, preview, resend and mail-status handling implemented; real admin-session creation and mail delivery unverified
 - [ ] Badges: keep admin navigation in portal, normalize website links and suggest editable artwork accent colors
 - [ ] Issued credentials: hidden-by-default awards, linked issuer attribution, recipient mark/badge controls and email notices
 - [ ] Developer issuance: authorized organization-owned badges, certificates/diplomas and idempotent username-based integration
