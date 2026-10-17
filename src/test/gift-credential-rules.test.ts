@@ -18,6 +18,14 @@ describe("Gift issuance", () => {
   it("does not report missing activation as success", () => {
     expect(() => requireGiftActivation("not_found")).toThrow("gift_activation_failed");
   });
+  it("account recipients do not require a private email in browser input", () => {
+    expect(giftIssueSchema.safeParse({ amountCents: 2500, sendEmail: true, recipientUserId: "00000000-0000-4000-8000-000000000001" }).success).toBe(true);
+    expect(giftIssueSchema.safeParse({ amountCents: 2500, sendEmail: true }).success).toBe(false);
+  });
+  it("percentage must be between one and one hundred", () => {
+    expect(giftIssueSchema.safeParse({ kind: "percentage", percentOff: 0 }).success).toBe(false);
+    expect(giftIssueSchema.safeParse({ kind: "percentage", percentOff: 101 }).success).toBe(false);
+  });
 });
 
 describe("Recipient-controlled credentials", () => {

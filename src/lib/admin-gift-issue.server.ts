@@ -3,6 +3,7 @@ import { giftDiscount, requireGiftActivation, type GiftIssueInput } from "./gift
 import { createGiftOrder, markGiftCardPaid } from "./gift-cards.server";
 import { generatePromoCode } from "./promo-admin.server";
 import { sendMail } from "@/emails/send.server";
+import { logPromoEvent } from "./promo.server";
 
 const escape = (s: string) => s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] ?? c));
 const copy = {
@@ -15,14 +16,27 @@ const copy = {
 export async function findGiftRecipients(query: string) {
   const q = query.replace(/^@+/, "").trim().toLowerCase();
   if (q.length < 2) return [];
-  const rows = await sql`select p.id, p.username, p.display_name, u.email from public.profiles p
-    join public.users u on u.id = p.id where lower(p.username) like ${`%${q.replace(/[%_]/g, "")}%`}
+  const rows = await sql`select p.id, p.username, p.display_name from public.profiles p
+    where lower(p.username) like ${`%${q.replace(/[%_]/g, "")}%`} and coalesce(p.is_banned, false) = false
     order by (lower(p.username) = ${q}) desc, p.username limit 10`;
-  return rows.map(r => ({ userId: String(r.id), username: String(r.username), name: String(r.display_name ?? ""), email: String(r.email ?? "") }));
+  return rows.map(r => ({ userId: String(r.id), username: String(r.username), name: String(r.display_name ?? "") }));
+}
+
+async function recipientInput(input: GiftIssueInput): Promise<GiftIssueInput> {
+  if (input.recipientEmail || !input.recipientUserId) return input;
+  const rows = await sql`select u.email from public.users u join public.profiles p on p.id = u.id
+    where u.id = ${input.recipientUserId} and coalesce(u.is_disabled, false) = false
+      and coalesce(p.is_banned, false) = false limit 1`;
+  const email = rows[0]?.email;
+  if (typeof email !== "string" || !email) throw new Error("gift_recipient_unavailable");
+  return { ...input, recipientEmail: email };
 }
 
 export async function sendAdminGift(code: string, input: GiftIssueInput) {
-  if (!input.sendEmail || !input.recipientEmail) return { emailed: false, delivery: "not_requested" as const };
+  if (!input.sendEmail) return { emailed: false, delivery: "not_requested" as const };
+  // Email addresses found through account lookup never cross the server boundary.
+  try { input = await recipientInput(input); } catch { return { emailed: false, delivery: "failed" as const }; }
+  if (!input.recipientEmail) return { emailed: false, delivery: "failed" as const };
   const c = copy[input.language];
   const d = giftDiscount(input);
   const money = (cents: number) => new Intl.NumberFormat(input.language, { style: "currency", currency: "EUR" }).format(cents / 100);
@@ -36,7 +50,7 @@ export async function sendAdminGift(code: string, input: GiftIssueInput) {
     <p><a href="https://rout.be/verify">${c.link}</a></p>`;
   try {
     const result = await sendMail({ to: input.recipientEmail, subject: c.subject, html, htmlFirst: true, language: input.language, tags: ["personal-gift"] });
-    if (result.sent) await sql`insert into public.promo_code_events (code, event, detail) values (${code}, 'sent_email', 'personal gift accepted by mail provider')`;
+    if (result.sent) await logPromoEvent(code, "sent_email", "personal gift accepted by mail provider");
     return { emailed: result.sent, delivery: result.sent ? "accepted" as const : "failed" as const };
   } catch {
     return { emailed: false, delivery: "failed" as const };
@@ -44,6 +58,7 @@ export async function sendAdminGift(code: string, input: GiftIssueInput) {
 }
 
 export async function issueAdminGift(adminId: string, purchaserEmail: string, input: GiftIssueInput) {
+  input = await recipientInput(input);
   const discount = giftDiscount(input);
   let code: string;
   if (input.kind === "fixed") {

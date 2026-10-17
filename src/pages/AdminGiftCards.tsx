@@ -1,15 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Copy, Package, Plus, Printer, RefreshCw, Truck } from "lucide-react";
+import { Package, Printer, RefreshCw, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { euro } from "@/lib/gift-cards";
-import { adminIssueGiftCard, listGiftShipments, setGiftShipmentStatus } from "@/lib/admin-gift-cards.functions";
+import { listGiftShipments, setGiftShipmentStatus } from "@/lib/admin-gift-cards.functions";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { GIFT_PRESETS } from "@/lib/gift-cards";
 import type { GiftShipmentRow } from "@/lib/admin-gift-cards.server";
 import { IssuePersonalGift } from "@/components/admin/IssuePersonalGift";
 
@@ -163,62 +162,3 @@ export default function AdminGiftCards() {
   );
 }
 
-/** Zelf een digitale bon aanmaken: direct actief als eenmalige code. */
-function IssueGiftCard() {
-  const issue = useServerFn(adminIssueGiftCard);
-  const [amount, setAmount] = useState("25");
-  const [email, setEmail] = useState("");
-  const [name, setName] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [code, setCode] = useState<string | null>(null);
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const cents = Math.round(Number(amount.replace(",", ".")) * 100);
-    if (!Number.isFinite(cents) || cents < 500 || cents > 50_000) {
-      toast.error("Kies een bedrag tussen € 5 en € 500.");
-      return;
-    }
-    setBusy(true);
-    try {
-      const res = await issue({ data: { amountCents: cents, recipientEmail: email, recipientName: name } });
-      setCode(res.code);
-      toast.success(email ? "Bon aangemaakt en verstuurd." : "Bon aangemaakt.");
-      setEmail("");
-      setName("");
-    } catch {
-      toast.error("Aanmaken is mislukt.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <section className="space-y-3 rounded-2xl border border-border bg-card p-4">
-      <h2 className="text-lg font-medium text-foreground">Nieuwe cadeaubon aanmaken</h2>
-      <p className="text-xs text-muted-foreground">Voor acties of compensaties. De bon is meteen bruikbaar; met een e-mailadres krijgt de ontvanger hem ook toegestuurd.</p>
-      <div className="flex flex-wrap gap-2">
-        {GIFT_PRESETS.map((c) => (
-          <Button key={c} type="button" size="sm" variant={Number(amount) * 100 === c ? "default" : "outline"} onClick={() => setAmount(String(c / 100))}>
-            {euro(c)}
-          </Button>
-        ))}
-      </div>
-      <form onSubmit={submit} className="grid gap-2 sm:grid-cols-[8rem_1fr_1fr_auto]">
-        <Input aria-label="Bedrag in euro" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Bedrag (€)" />
-        <Input aria-label="E-mail ontvanger" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="E-mail ontvanger (optioneel)" />
-        <Input aria-label="Naam ontvanger" value={name} onChange={(e) => setName(e.target.value)} placeholder="Naam ontvanger (optioneel)" />
-        <Button type="submit" disabled={busy}><Plus className="mr-1.5 h-3.5 w-3.5" aria-hidden /> Aanmaken</Button>
-      </form>
-      {code && (
-        <div className="flex items-center gap-2 rounded-xl border border-border bg-background p-3">
-          <span className="text-xs text-muted-foreground">Nieuwe code:</span>
-          <code className="font-mono text-sm text-foreground">{code}</code>
-          <Button type="button" size="sm" variant="ghost" aria-label="Code kopiëren" onClick={() => { void navigator.clipboard.writeText(code); toast.success("Gekopieerd."); }}>
-            <Copy className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-      )}
-    </section>
-  );
-}

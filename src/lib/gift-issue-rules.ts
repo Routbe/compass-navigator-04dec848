@@ -8,6 +8,7 @@ export const giftIssueSchema = z.object({
   maxRedemptions: z.number().int().min(1).max(10_000).default(1),
   expiresAt: z.string().datetime().nullable().optional(),
   recipientEmail: z.string().trim().toLowerCase().email().max(254).optional().or(z.literal("")),
+  recipientUserId: z.string().uuid().nullable().optional(),
   recipientName: z.string().trim().max(80).optional(),
   message: z.string().trim().max(300).optional(),
   language: z.enum(["nl", "en", "fr", "de"]).default("nl"),
@@ -15,7 +16,7 @@ export const giftIssueSchema = z.object({
 }).superRefine((data, ctx) => {
   if (data.kind === "fixed" && data.amountCents === undefined) ctx.addIssue({ code: "custom", path: ["amountCents"], message: "Amount required" });
   if (data.kind === "percentage" && data.percentOff === undefined) ctx.addIssue({ code: "custom", path: ["percentOff"], message: "Percentage required" });
-  if (data.sendEmail && !data.recipientEmail) ctx.addIssue({ code: "custom", path: ["recipientEmail"], message: "Recipient required" });
+  if (data.sendEmail && !data.recipientEmail && !data.recipientUserId) ctx.addIssue({ code: "custom", path: ["recipientEmail"], message: "Recipient required" });
   if (data.expiresAt && Date.parse(data.expiresAt) <= Date.now()) ctx.addIssue({ code: "custom", path: ["expiresAt"], message: "Expiry must be in the future" });
 });
 

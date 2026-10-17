@@ -145,7 +145,9 @@ export async function markGiftCardPaid(opts: {
            stripe_reference = coalesce(${opts.reference ?? null}, stripe_reference),
            updated_at = now()
      where id = ${opts.giftId}
-       and status in ('pending', 'paid')
+       and (status = 'pending' or (status = 'paid' and not exists (
+         select 1 from public.promo_codes where code = public.gift_cards.code
+       )))
     returning *
     ), promo as (
       insert into public.promo_codes (code, label, percent_off, amount_off_cents, max_redemptions, expires_at, active)
